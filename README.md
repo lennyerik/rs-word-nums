@@ -3,6 +3,8 @@ Using the handy `num!` macro from this crate, you can write all of the numbers i
 
 The crate depends on **nothing** else and never will, so you can live out all of your minimalist fantasies.
 
+Obviously, all of the parsing and macro substitution is done at compile time.
+
 ## Example usage
 Add the crate to your project using:
 
@@ -13,16 +15,29 @@ Afterwards, you can start to rewrite every number in your Rust project in plain,
 ```rust
 use word_nums::num;
 
-const MY_NUMBER: u32 = num!(one hundred fifty five thousand three hundred seventy two);
+const MY_NUMBER: i32 = num!(one hundred fifty five thousand three hundred seventy two);
 
 fn main() {
-    println!("{}", MY_NUMBER - num!(hundred fifty four thousand thirty five));
+    println!("{}", MY_NUMBER + num!(minus hundred fifty four thousand thirty five));
 }
 ```
 
 The `num!` macro will automatically return an evaluated literal of the smallest integer type the number fits into.
+By default, all numbers from `num` will be signed.
+If you want an unsigned int, please explicitly specify a positive sign at the start of the number:
+```rust
+num!(plus one thousand three hundred thirty seven)
 
-Obviously, all of the parsing and macro substitution is done at compile time.
+// Or
+
+num!(positive one thousand three hundred and thirty seven)
+```
+
+The library will do its best to understand you.
+It will even reciprocate your lazyness to write thousands as multiples of hundreds:
+```rust
+num!(fifty seven hundred)
+```
 
 ## Why?
 The library was inspired by this [very cursed Reddit post](https://www.reddit.com/r/programminghorror/comments/13r7c2w/using_macros_to_write_123_as_one_hundred_twenty/).

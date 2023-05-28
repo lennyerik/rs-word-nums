@@ -1,11 +1,13 @@
 use proc_macro::{Ident, Literal, Span, TokenStream, TokenTree};
 
-type NumType = u128;
+type NumType = i128;
 
 #[proc_macro]
 pub fn num(token_stream: TokenStream) -> TokenStream {
     match parse_tokens(token_stream) {
         Ok(mut num_tokens) => {
+            let sign = get_sign(&mut num_tokens);
+
             // Add the implicit 1 at the start for number strings that start with
             // a multiplier, like "hundred fifity two"
             if let Some(NumToken::Multiplier(_)) = num_tokens.first() {
@@ -29,22 +31,19 @@ pub fn num(token_stream: TokenStream) -> TokenStream {
                             acc = 0;
                         }
                     }
+
+                    // Any subsequent signs are invalid and should be ignored.
+                    // We should never get here anyways, because parse_tokens is going to return an error in this case.
+                    NumToken::Sign(_) => {}
                 }
             }
 
             sum += acc;
+            if let Sign::Negative = sign {
+                sum = -sum;
+            }
 
-            let literal = if sum <= u8::MAX as NumType {
-                Literal::u8_suffixed(sum as u8)
-            } else if sum <= u16::MAX as NumType {
-                Literal::u16_suffixed(sum as u16)
-            } else if sum <= u32::MAX as NumType {
-                Literal::u32_suffixed(sum as u32)
-            } else if sum <= u64::MAX as NumType {
-                Literal::u64_suffixed(sum as u64)
-            } else {
-                Literal::u128_suffixed(sum)
-            };
+            let literal = make_sized_num_literal(sign, sum);
 
             let mut out = TokenStream::new();
             out.extend([TokenTree::Literal(literal)]);
@@ -56,6 +55,9 @@ pub fn num(token_stream: TokenStream) -> TokenStream {
                 NumTokenParseError::NonIdentToken(tt) => ("Non-identifier encountered", tt.span()),
                 NumTokenParseError::InvalidToken(ident) => {
                     ("Invalid token encountered", ident.span())
+                }
+                NumTokenParseError::UnexpectedSign(ident) => {
+                    ("Unexpected sign descriptor encountered", ident.span())
                 }
             };
 
@@ -75,11 +77,18 @@ fn parse_tokens(token_stream: TokenStream) -> Result<Vec<NumToken>, NumTokenPars
         None => Vec::new(),
     };
 
+    let mut first = true;
     for token in stream_iter {
         match token {
             TokenTree::Ident(ident) => {
-                if let Some(parsed_token) = parse_single_token(ident)? {
+                if let Some(parsed_token) = parse_single_token(&ident)? {
+                    // Error if we encounter a sign that is not in the first position
+                    if matches!(parsed_token, NumToken::Sign(_)) && !first {
+                        return Err(NumTokenParseError::UnexpectedSign(ident));
+                    }
+
                     num_tokens.push(parsed_token);
+                    first = false;
                 }
             }
 
@@ -93,7 +102,7 @@ fn parse_tokens(token_stream: TokenStream) -> Result<Vec<NumToken>, NumTokenPars
     Ok(num_tokens)
 }
 
-fn parse_single_token(ident: Ident) -> Result<Option<NumToken>, NumTokenParseError> {
+fn parse_single_token(ident: &Ident) -> Result<Option<NumToken>, NumTokenParseError> {
     match ident.to_string().to_lowercase().as_str() {
         "one" | "a" => Ok(Some(NumToken::Literal(1))),
         "two" => Ok(Some(NumToken::Literal(2))),
@@ -134,9 +143,48 @@ fn parse_single_token(ident: Ident) -> Result<Option<NumToken>, NumTokenParseErr
         "septillion" => Ok(Some(NumToken::Multiplier(1000000000000000000000))),
         "octillion" => Ok(Some(NumToken::Multiplier(1000000000000000000000000))),
 
+        "plus" | "positive" => Ok(Some(NumToken::Sign(Sign::Positive))),
+        "minus" | "negative" => Ok(Some(NumToken::Sign(Sign::Negative))),
+
         "and" => Ok(None),
 
-        _ => Err(NumTokenParseError::InvalidToken(ident)),
+        _ => Err(NumTokenParseError::InvalidToken(ident.clone())),
+    }
+}
+
+macro_rules! return_if_ok {
+    ($e:expr) => {
+        if let Ok(x) = $e {
+            return x;
+        }
+    };
+}
+
+fn make_sized_num_literal(sign: Sign, value: NumType) -> Literal {
+    match sign {
+        Sign::Unspecified | Sign::Negative => {
+            return_if_ok!(value.try_into().map(Literal::i8_suffixed));
+            return_if_ok!(value.try_into().map(Literal::i16_suffixed));
+            return_if_ok!(value.try_into().map(Literal::i32_suffixed));
+            return_if_ok!(value.try_into().map(Literal::i64_suffixed));
+            Literal::i128_suffixed(value)
+        }
+        Sign::Positive => {
+            return_if_ok!(value.try_into().map(Literal::u8_suffixed));
+            return_if_ok!(value.try_into().map(Literal::u16_suffixed));
+            return_if_ok!(value.try_into().map(Literal::u32_suffixed));
+            return_if_ok!(value.try_into().map(Literal::u64_suffixed));
+            Literal::u128_suffixed(value as u128)
+        }
+    }
+}
+
+fn get_sign(num_tokens: &mut Vec<NumToken>) -> Sign {
+    if let Some(NumToken::Sign(sign)) = num_tokens.first().copied() {
+        num_tokens.remove(0);
+        sign
+    } else {
+        Sign::Unspecified
     }
 }
 
@@ -148,17 +196,6 @@ fn is_larger_multiplier(x: NumToken, than: NumType) -> bool {
     }
 }
 
-#[derive(Copy, Clone)]
-enum NumToken {
-    Literal(NumType),
-    Multiplier(NumType),
-}
-
-enum NumTokenParseError {
-    NonIdentToken(TokenTree),
-    InvalidToken(Ident),
-}
-
 fn attach_span(token_stream: TokenStream, span: Span) -> TokenStream {
     let mut ret = TokenStream::new();
     ret.extend(token_stream.into_iter().map(|token| {
@@ -167,4 +204,25 @@ fn attach_span(token_stream: TokenStream, span: Span) -> TokenStream {
         new
     }));
     ret
+}
+
+#[derive(Debug, Copy, Clone)]
+enum NumToken {
+    Literal(NumType),
+    Multiplier(NumType),
+    Sign(Sign),
+}
+
+#[derive(Debug, Copy, Clone)]
+enum Sign {
+    Unspecified,
+    Positive,
+    Negative,
+}
+
+#[derive(Debug)]
+enum NumTokenParseError {
+    NonIdentToken(TokenTree),
+    InvalidToken(Ident),
+    UnexpectedSign(Ident),
 }
