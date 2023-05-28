@@ -76,12 +76,17 @@ fn parse_tokens(token_stream: TokenStream) -> Result<Vec<NumToken>, NumTokenPars
     };
 
     for token in stream_iter {
-        if let TokenTree::Ident(ident) = token {
-            if let Some(parsed_token) = parse_single_token(ident)? {
-                num_tokens.push(parsed_token);
+        match token {
+            TokenTree::Ident(ident) => {
+                if let Some(parsed_token) = parse_single_token(ident)? {
+                    num_tokens.push(parsed_token);
+                }
             }
-        } else {
-            return Err(NumTokenParseError::NonIdentToken(token));
+
+            // We just ignore dashes, since they can occur in numbers like twenty-five
+            TokenTree::Punct(punct) if punct.as_char() == '-' => {}
+
+            _ => return Err(NumTokenParseError::NonIdentToken(token)),
         }
     }
 
