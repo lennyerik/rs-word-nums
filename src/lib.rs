@@ -127,7 +127,7 @@ fn parse_single_token(ident: &Ident) -> Result<Option<NumToken>, NumTokenParseEr
 
         "twenty" => Ok(Some(NumToken::Literal(20))),
         "thirty" => Ok(Some(NumToken::Literal(30))),
-        "fourty" => Ok(Some(NumToken::Literal(40))),
+        "forty" | "fourty" => Ok(Some(NumToken::Literal(40))),
         "fifty" => Ok(Some(NumToken::Literal(50))),
         "sixty" => Ok(Some(NumToken::Literal(60))),
         "seventy" => Ok(Some(NumToken::Literal(70))),
