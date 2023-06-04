@@ -104,6 +104,7 @@ fn parse_tokens(token_stream: TokenStream) -> Result<Vec<NumToken>, NumTokenPars
 
 fn parse_single_token(ident: &Ident) -> Result<Option<NumToken>, NumTokenParseError> {
     match ident.to_string().to_lowercase().as_str() {
+        "zero" => Ok(Some(NumToken::Literal(0))),
         "one" | "a" => Ok(Some(NumToken::Literal(1))),
         "two" => Ok(Some(NumToken::Literal(2))),
         "three" => Ok(Some(NumToken::Literal(3))),
