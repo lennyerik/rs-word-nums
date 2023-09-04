@@ -18,7 +18,7 @@ jobs:
         - name: Build
           run: cargo build
         - name: Clippy
-          run: cargo clippy -- -Dwarnings
+          run: cargo clippy -- -Dwarnings -W clippy::pedantic -W clippy::nursery -W clippy::unwrap_used
         - name: Formatting
           run: cargo fmt --check
 

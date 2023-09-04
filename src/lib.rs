@@ -1,6 +1,7 @@
 use proc_macro::{Ident, Literal, Span, TokenStream, TokenTree};
 
 type NumType = i128;
+const NUM_TOO_BIG_ERROR_MSG: &str = "You number literal is too big to fit the internal representation of the word_nums crate or any potentially generated number literal.";
 
 #[proc_macro]
 pub fn num(token_stream: TokenStream) -> TokenStream {
@@ -15,11 +16,13 @@ pub fn num(token_stream: TokenStream) -> TokenStream {
             }
 
             // Generate the number literal
-            let mut sum = 0;
-            let mut acc = 0;
+            let mut sum: NumType = 0;
+            let mut acc: NumType = 0;
             for (i, num_token) in num_tokens.iter().enumerate() {
                 match num_token {
-                    NumToken::Literal(value) => acc += value,
+                    NumToken::Literal(value) => {
+                        acc = acc.checked_add(*value).expect(NUM_TOO_BIG_ERROR_MSG);
+                    }
                     NumToken::Multiplier(value) => {
                         acc *= value;
                         if !num_tokens
@@ -27,7 +30,7 @@ pub fn num(token_stream: TokenStream) -> TokenStream {
                             .skip(i + 1)
                             .any(|x| is_larger_multiplier(*x, *value))
                         {
-                            sum += acc;
+                            sum = sum.checked_add(acc).expect(NUM_TOO_BIG_ERROR_MSG);
                             acc = 0;
                         }
                     }
@@ -39,7 +42,7 @@ pub fn num(token_stream: TokenStream) -> TokenStream {
             }
 
             sum += acc;
-            if let Sign::Negative = sign {
+            if matches!(sign, Sign::Negative) {
                 sum = -sum;
             }
 
@@ -61,7 +64,7 @@ pub fn num(token_stream: TokenStream) -> TokenStream {
                 }
             };
 
-            let compile_err = format!(r#"compile_error!("{}")"#, err_str)
+            let compile_err = format!(r#"compile_error!("{err_str}")"#)
                 .parse()
                 .expect("Failed to output compile error");
             attach_span(compile_err, span)
@@ -72,10 +75,10 @@ pub fn num(token_stream: TokenStream) -> TokenStream {
 fn parse_tokens(token_stream: TokenStream) -> Result<Vec<NumToken>, NumTokenParseError> {
     let stream_iter = token_stream.into_iter();
 
-    let mut num_tokens = match stream_iter.size_hint().1 {
-        Some(sz) => Vec::with_capacity(sz),
-        None => Vec::new(),
-    };
+    let mut num_tokens = stream_iter
+        .size_hint()
+        .1
+        .map_or_else(Vec::new, Vec::with_capacity);
 
     let mut first = true;
     for token in stream_iter {
@@ -136,13 +139,15 @@ fn parse_single_token(ident: &Ident) -> Result<Option<NumToken>, NumTokenParseEr
 
         "hundred" => Ok(Some(NumToken::Multiplier(100))),
         "thousand" => Ok(Some(NumToken::Multiplier(1000))),
-        "million" => Ok(Some(NumToken::Multiplier(1000000))),
-        "billion" => Ok(Some(NumToken::Multiplier(1000000000))),
-        "trillion" => Ok(Some(NumToken::Multiplier(1000000000000))),
-        "quadrillion" => Ok(Some(NumToken::Multiplier(1000000000000000))),
-        "quintillion" => Ok(Some(NumToken::Multiplier(1000000000000000000))),
-        "septillion" => Ok(Some(NumToken::Multiplier(1000000000000000000000))),
-        "octillion" => Ok(Some(NumToken::Multiplier(1000000000000000000000000))),
+        "million" => Ok(Some(NumToken::Multiplier(1_000_000))),
+        "billion" => Ok(Some(NumToken::Multiplier(1_000_000_000))),
+        "trillion" => Ok(Some(NumToken::Multiplier(1_000_000_000_000))),
+        "quadrillion" => Ok(Some(NumToken::Multiplier(1_000_000_000_000_000))),
+        "quintillion" => Ok(Some(NumToken::Multiplier(1_000_000_000_000_000_000))),
+        "septillion" => Ok(Some(NumToken::Multiplier(1_000_000_000_000_000_000_000))),
+        "octillion" => Ok(Some(NumToken::Multiplier(
+            1_000_000_000_000_000_000_000_000,
+        ))),
 
         "plus" | "positive" => Ok(Some(NumToken::Sign(Sign::Positive))),
         "minus" | "negative" => Ok(Some(NumToken::Sign(Sign::Negative))),
@@ -175,7 +180,12 @@ fn make_sized_num_literal(sign: Sign, value: NumType) -> Literal {
             return_if_ok!(value.try_into().map(Literal::u16_suffixed));
             return_if_ok!(value.try_into().map(Literal::u32_suffixed));
             return_if_ok!(value.try_into().map(Literal::u64_suffixed));
-            Literal::u128_suffixed(value as u128)
+
+            // There is no way to avoid potentially truncating the value here and still
+            // support signed number literals. This library is intended for integer literals
+            // only,so we won't depend on a bignum library for the internal representation
+            // of the numbers.
+            Literal::u128_suffixed(value.try_into().expect(NUM_TOO_BIG_ERROR_MSG))
         }
     }
 }
@@ -189,7 +199,7 @@ fn get_sign(num_tokens: &mut Vec<NumToken>) -> Sign {
     }
 }
 
-fn is_larger_multiplier(x: NumToken, than: NumType) -> bool {
+const fn is_larger_multiplier(x: NumToken, than: NumType) -> bool {
     if let NumToken::Multiplier(value) = x {
         value > than
     } else {

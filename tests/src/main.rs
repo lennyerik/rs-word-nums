@@ -1,4 +1,4 @@
-fn main() {}
+const fn main() {}
 
 #[cfg(test)]
 mod tests {
@@ -83,20 +83,20 @@ mod tests {
         );
         assert_eq!(
             num!(two billion one hundred forty seven million four hundred eighty-three thousand six hundred forty seven),
-            2147483647i32
+            2_147_483_647_i32
         );
         assert_eq!(
             num!(plus four billion two hundred ninety four million nine hundred sixty seven thousand two hundred ninety five),
-            4294967295u32
+            4_294_967_295_u32
         );
         assert_eq!(
             num!(nine quintillion two hundred twenty three quadrillion three hundred seventy two trillion thirty six billion eight hundred fifty four million seven hundred seventy five thousand eight hundred seven),
-            9223372036854775807i64
+            9_223_372_036_854_775_807_i64
         );
         assert_eq!(
             num!(plus eighteen quintillion four hundred forty-six quadrillion seven hundred forty four trillion seventy three billion seven hundred nine million five hundred fifty one thousand six hundred fifteen
             ),
-            18446744073709551615u64
+            18_446_744_073_709_551_615_u64
         );
     }
 
