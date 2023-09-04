@@ -3,6 +3,47 @@ use proc_macro::{Ident, Literal, Span, TokenStream, TokenTree};
 type NumType = i128;
 const NUM_TOO_BIG_ERROR_MSG: &str = "You number literal is too big to fit the internal representation of the word_nums crate or any potentially generated number literal.";
 
+/// Specifies an integer literal using English words.
+///
+/// The macro expands to the smallest possible integer type the number
+/// fits into. For example:
+///
+/// ```
+/// # use word_nums::num;
+/// assert_eq!(num!(eight), 8_i8);
+/// assert_eq!(num!(four hundred), 400_i16);
+/// assert_eq!(num!(one hundred thousand), 100_000i32);
+/// ```
+///
+/// Negative numbers are denoted with a leading "negative" or "minus".
+/// ```
+/// # use word_nums::num;
+/// assert_eq!(num!(minus six), -6);
+/// ```
+///
+/// By default, all integer literals are unsigned. To create a signed literal,
+/// explicitly start the number string with the words "positive" or "plus"
+/// the contents of the file.
+///
+/// ```
+/// # use word_nums::num;
+/// assert_eq!(num!(positive sixty four), 64_u8);
+/// assert_eq!(num!(plus two hundred seventy nine), 279_u16);
+/// ```
+///
+/// # Panics
+///
+/// This macro will panic at compile time if:
+///   * The number literal is invalid or could not be parsed
+///   * The number literal is too larger than `i128::MAX`
+///
+/// # Examples
+///
+/// ```
+/// # use word_nums::num;
+/// assert_eq!(num!(forty two), 42);
+/// assert_eq!(num!(minus one thousand three hundred thirty seven), -1337);
+/// ```
 #[proc_macro]
 pub fn num(token_stream: TokenStream) -> TokenStream {
     match parse_tokens(token_stream) {
